@@ -1,6 +1,6 @@
 {
-  "name": "@joewiz/semantic-release-expath",
-  "version": "0.1.0",
+  "name": "@existdb/repo-xml-changelog-generator",
+  "version": "0.0.0-development",
   "description": "semantic-release plugin: inject conventional-commit changelog entries into EXPath package repo.xml descriptors (eXist-db / BaseX / MarkLogic XAR packages)",
   "type": "module",
   "main": "index.js",
@@ -14,7 +14,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test 'test/**/*.test.js'"
+    "test": "node --test 'test/**/*.test.js'",
+    "prepare": "husky || true"
   },
   "keywords": [
     "semantic-release",
@@ -28,12 +29,15 @@
   "license": "LGPL-2.1-or-later",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/joewiz/semantic-release-expath.git"
+    "url": "git+https://github.com/eXist-db/repo-xml-changelog-generator.git"
   },
   "bugs": {
-    "url": "https://github.com/joewiz/semantic-release-expath/issues"
+    "url": "https://github.com/eXist-db/repo-xml-changelog-generator/issues"
   },
-  "homepage": "https://github.com/joewiz/semantic-release-expath#readme",
+  "homepage": "https://github.com/eXist-db/repo-xml-changelog-generator#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -45,5 +49,11 @@
     "conventional-changelog-conventionalcommits": "^9.0.0",
     "conventional-changelog-writer": "^8.0.0",
     "conventional-commits-parser": "^6.0.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "husky": "^9.0.0",
+    "semantic-release": "^24.0.0"
   }
 }

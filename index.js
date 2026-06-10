@@ -1,5 +1,5 @@
 /**
- * @joewiz/semantic-release-expath
+ * @existdb/repo-xml-changelog-generator
  *
  * semantic-release plugin that injects a new `<change>` entry into an EXPath
  * package descriptor (typically `repo.xml.tmpl`) based on the Conventional
@@ -51,7 +51,7 @@ export async function verifyConditions (pluginConfig, context) {
 
   if (!existsSync(tmplPath)) {
     throw new Error(
-      `[semantic-release-expath] Template not found: ${tmplPath}\n` +
+      `[repo-xml-changelog-generator] Template not found: ${tmplPath}\n` +
       `Set the \`tmplPath\` plugin option if your descriptor lives elsewhere.`
     )
   }
@@ -59,12 +59,12 @@ export async function verifyConditions (pluginConfig, context) {
   const changelog = await readChangelogContainer(tmplPath)
   if (!changelog) {
     throw new Error(
-      `[semantic-release-expath] No <changelog xmlns="${REPO_NS}"> element found in ${tmplPath}.\n` +
+      `[repo-xml-changelog-generator] No <changelog xmlns="${REPO_NS}"> element found in ${tmplPath}.\n` +
       `Add an empty <changelog/> child inside <meta> to enable change-entry injection.`
     )
   }
 
-  logger.log(`[semantic-release-expath] verified ${tmplPath}`)
+  logger.log(`[repo-xml-changelog-generator] verified ${tmplPath}`)
 }
 
 export async function prepare (pluginConfig, context) {
@@ -73,7 +73,7 @@ export async function prepare (pluginConfig, context) {
 
   if (!lastRelease?.gitTag) {
     logger.log(
-      '[semantic-release-expath] No previous release tag — skipping changelog injection. ' +
+      '[repo-xml-changelog-generator] No previous release tag — skipping changelog injection. ' +
       '(First-release entries should be curated manually in repo.xml.tmpl.)'
     )
     return
@@ -86,7 +86,7 @@ export async function prepare (pluginConfig, context) {
   })
 
   if (items.length === 0) {
-    logger.log(`[semantic-release-expath] No notable commits since ${lastRelease.gitTag} — skipping.`)
+    logger.log(`[repo-xml-changelog-generator] No notable commits since ${lastRelease.gitTag} — skipping.`)
     return
   }
 
@@ -96,5 +96,5 @@ export async function prepare (pluginConfig, context) {
     items
   })
 
-  logger.log(`[semantic-release-expath] inserted ${items.length} change item(s) for ${nextRelease.version} into ${tmplPath}`)
+  logger.log(`[repo-xml-changelog-generator] inserted ${items.length} change item(s) for ${nextRelease.version} into ${tmplPath}`)
 }

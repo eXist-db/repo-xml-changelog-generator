@@ -1,25 +1,15 @@
-# @joewiz/semantic-release-expath
-
-[![status: prototype](https://img.shields.io/badge/status-prototype-yellow.svg)](#status)
+# @existdb/repo-xml-changelog-generator
 
 A [semantic-release](https://github.com/semantic-release/semantic-release) plugin that injects a new `<change>` entry into an [EXPath package descriptor](https://expath.org/spec/pkg) (typically `repo.xml.tmpl` for eXist-db XAR packages) based on the Conventional Commits between the previous release tag and the current release.
 
-> **Status — prototype.** This is a personal-namespace prototype circulated for design discussion (with @line-o and others) before considering publication under `@existdb` and adoption across the eXist-db org. See [Status](#status) for the planned trajectory.
-
 ## What problem this solves
 
-eXist-db apps and libraries that already use [semantic-release](https://github.com/semantic-release/semantic-release) for automated tagging and GitHub Releases still need to keep the in-XAR EXPath `<change>` history up to date. Today, every adopter (monex, function-documentation, semver.xq) maintains its own copy of an `update-repo-changelog.js` script invoked via `@semantic-release/exec`. This plugin productizes that script into a single, configurable semantic-release plugin so the script doesn't need to be copy-pasted into every repo.
+eXist-db apps and libraries that already use [semantic-release](https://github.com/semantic-release/semantic-release) for automated tagging and GitHub Releases still need to keep the in-XAR EXPath `<change>` history up to date. Previously, every adopter (monex, function-documentation, semver.xq) maintained its own copy of an `update-repo-changelog.js` script invoked via `@semantic-release/exec`. This plugin productizes that script into a single, configurable semantic-release plugin so the script doesn't need to be copy-pasted into every repo.
 
 ## Install
 
 ```bash
-npm install --save-dev @joewiz/semantic-release-expath
-```
-
-While this is a prototype hosted only on GitHub, install directly from the repo:
-
-```bash
-npm install --save-dev "github:joewiz/semantic-release-expath"
+npm install --save-dev @existdb/repo-xml-changelog-generator
 ```
 
 ## Usage
@@ -39,7 +29,7 @@ Add to your `.releaserc` plugin chain. Place it after the commit-analyzer / rele
     }],
 
     // 2) inject the <change> entry into repo.xml.tmpl
-    "@joewiz/semantic-release-expath",
+    "@existdb/repo-xml-changelog-generator",
 
     // 3) build the XAR (now sees both the bumped version + the injected <change>)
     ["@semantic-release/exec", { "publishCmd": "npm run build" }],
@@ -61,7 +51,7 @@ Add to your `.releaserc` plugin chain. Place it after the commit-analyzer / rele
 | `tmplPath` | string | `'repo.xml.tmpl'` | Path to the EXPath repo descriptor template, relative to `cwd`. |
 
 ```jsonc
-["@joewiz/semantic-release-expath", { "tmplPath": "src/repo.xml.tmpl" }]
+["@existdb/repo-xml-changelog-generator", { "tmplPath": "src/repo.xml.tmpl" }]
 ```
 
 ## What it does
@@ -122,20 +112,18 @@ Because every adopter would still have to copy it into their repo and invoke it 
 
 semantic-release itself is a Node tool and runs in Node. The plugin API is Node-native. Reimplementing in XQuery would mean either (a) standing up a separate XQuery runtime in CI just to run the changelog hook, or (b) calling out to it via HTTP/shell. Both add complexity for no user-visible benefit. The plugin's output (the `<change>` element it emits) is the data that lives in the XQuery world — the producer can be in any language.
 
-## Status
+## Releasing this package
 
-| Phase | Description | State |
-|-------|-------------|-------|
-| **v0.1 — prototype** | This repo. `@joewiz` namespace. Lift-and-shift of the existing monex/function-documentation script into plugin shape. | 🟢 here |
-| **v0.2 — community feedback** | Circulate to @line-o and other org devs. Iterate on the API surface (config options, lifecycle hooks, optional `expath-pkg.xml.tmpl` support). | ⏳ pending |
-| **v1.0 — publish to `@existdb`** | Transfer to the eXist-db org's npm scope. Adopt across bundled apps as part of the broader release-strategy rollout. | ⏳ pending |
+This plugin releases itself with semantic-release, eating its own dog food. Merges to `main` run the [CI workflow](.github/workflows/release.yml): the test matrix runs, then `semantic-release` analyzes the Conventional Commits, computes the next version, publishes to npm (`@existdb` scope), and creates the GitHub Release. The in-tree `version` stays pinned at `0.0.0-development`; the real version is set in-memory at release time (the same no-push pattern this plugin advocates for adopters).
 
-This plugin corresponds to §5.3 of a broader release-strategy proposal currently being circulated for community comment among the eXist-db devs.
+Commit messages are linted against [Conventional Commits](https://www.conventionalcommits.org/) via commitlint — locally through a husky `commit-msg` hook, and in CI on every pull request.
 
 ## Acknowledgements
 
 - The core changelog logic was originally written for [eXist-db/semver.xq#69](https://github.com/eXist-db/semver.xq/pull/69) and adopted in [eXist-db/monex](https://github.com/eXist-db/monex) and [eXist-db/function-documentation](https://github.com/eXist-db/function-documentation). This plugin is a refactor of that proven logic.
 - @line-o pointed out that the no-push pattern matches what `@existdb/xst`, `@existdb/node-exist`, and `@existdb/gulp-exist` already do. That feedback shaped this plugin's design.
+
+This plugin corresponds to §5.3 of a broader release-strategy proposal being circulated among the eXist-db devs for automating EXPath package releases.
 
 ## License
 
