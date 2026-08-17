@@ -76,6 +76,8 @@ For each conventional commit since `context.lastRelease.gitTag`:
   - `Revert` (for `revert:`)
   - or the literal type for other categories.
 - Render breaking changes as `Breaking change: <text>` from `BREAKING CHANGE:` footers.
+- Render issue/PR references (e.g. `#398`) as XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`; on non-GitHub remotes they are kept as plain text.
+- Hard-wrapped commit subjects are folded into a single line, and hard-wrapped `BREAKING CHANGE:` footers are collapsed to single-line items.
 
 The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://www.w3.org/1999/xhtml">…</ul></change>` and inserted at the **top** of the existing `<changelog>` element (most recent first).
 

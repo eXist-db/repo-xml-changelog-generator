@@ -82,7 +82,8 @@ export async function prepare (pluginConfig, context) {
   const items = await buildChangeItems({
     prevTag: lastRelease.gitTag,
     version: nextRelease.version,
-    cwd: context.cwd
+    cwd: context.cwd,
+    repositoryUrl: context.options?.repositoryUrl
   })
 
   if (items.length === 0) {
