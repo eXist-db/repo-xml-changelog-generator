@@ -42,7 +42,12 @@ Add to your `.releaserc` plugin chain. Place it after the commit-analyzer / rele
 }
 ```
 
-**Do not** include `@semantic-release/git` in the plugin chain. The mutation this plugin performs is in-memory on the CI runner; the on-disk `repo.xml.tmpl` in your default branch stays at its development-placeholder state, and the per-release changelog history lives in git tags + GitHub Releases. See [Design rationale](#design-rationale) below.
+The plugin works with or without `@semantic-release/git` — the choice decides where your changelog history lives:
+
+- **Without it** (in-memory mode), the mutation happens only on the CI runner; the on-disk `repo.xml.tmpl` in your default branch stays at its development-placeholder state, and the per-release changelog history lives in git tags + GitHub Releases. Note that each built XAR then contains only the entries curated in the template plus the *current* release's generated entry — the entries generated for previous releases are not carried forward.
+- **With it** (commit-back mode), add `@semantic-release/git` *after* this plugin with `repo.xml.tmpl` (and typically `package.json` + `package-lock.json`) as assets. Each release then commits the new `<change>` entry back to the default branch, so the changelog accumulates and every released XAR carries the full history. This is the model `eXist-db/monex` adopted by community vote ([monex#453](https://github.com/eXist-db/monex/pull/453)); it requires branch protection to allow the GitHub Actions app to push.
+
+See [Design rationale](#design-rationale) below.
 
 ## Configuration
 
@@ -97,9 +102,11 @@ The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://w
 
 The default approach for many semantic-release setups is to use `@semantic-release/git` to commit the mutated files (`package.json`, `CHANGELOG.md`, etc.) back to the default branch. For eXist-db org repos with branch protection that requires PRs, this means the GitHub Actions token can't push the release commit — you need a PAT or a GitHub App to bypass protection. That's operational overhead (PAT rotation, App installation per repo, secret management).
 
-The alternative — used by `@existdb/xst`, `@existdb/node-exist`, `@existdb/gulp-exist`, and (since 2026-05-19) `eXist-db/monex` and `eXist-db/function-documentation` — is to **pin the default-branch version to `0.0.0-development` permanently**, do all the version + changelog work in-memory on the CI runner, and let the built XAR carry the real version. No push-back, no token plumbing, branch protection works as intended.
+The alternative — used by `@existdb/xst`, `@existdb/node-exist`, `@existdb/gulp-exist`, and `eXist-db/function-documentation` — is to **pin the default-branch version to `0.0.0-development` permanently**, do all the version + changelog work in-memory on the CI runner, and let the built XAR carry the real version. No push-back, no token plumbing, branch protection works as intended.
 
-This plugin is designed for that workflow. (It would also work alongside `@semantic-release/git`, but the apps in the org don't need that path.)
+The trade-off: for npm packages the version history lives in the npm registry anyway, but for XAR packages the `<changelog>` in the shipped descriptor is itself the history — and in-memory mode drops each generated entry after its release. `eXist-db/monex` used in-memory mode from 2026-05-19 until a community vote switched it to commit-back ([monex#453](https://github.com/eXist-db/monex/pull/453)) after its 5.1.0 XAR shipped without the generated 5.0.0 entry. Branch protection there allows the GitHub Actions app to push, so no PAT or custom App is needed.
+
+This plugin supports both workflows; pick per repository.
 
 ### Why not just publish the existing script as-is?
 
@@ -116,7 +123,7 @@ semantic-release itself is a Node tool and runs in Node. The plugin API is Node-
 
 ## Releasing this package
 
-This plugin releases itself with semantic-release, eating its own dog food. Merges to `main` run the [CI workflow](.github/workflows/release.yml): the test matrix runs, then `semantic-release` analyzes the Conventional Commits, computes the next version, publishes to npm (`@existdb` scope), and creates the GitHub Release. The in-tree `version` stays pinned at `0.0.0-development`; the real version is set in-memory at release time (the same no-push pattern this plugin advocates for adopters).
+This plugin releases itself with semantic-release, eating its own dog food. Merges to `main` run the [CI workflow](.github/workflows/release.yml): the test matrix runs, then `semantic-release` analyzes the Conventional Commits, computes the next version, publishes to npm (`@existdb` scope), and creates the GitHub Release. The in-tree `version` stays pinned at `0.0.0-development`; the real version is set in-memory at release time (the in-memory workflow described above — a natural fit here, since an npm package's version history lives in the registry).
 
 Commit messages are linted against [Conventional Commits](https://www.conventionalcommits.org/) via commitlint — locally through a husky `commit-msg` hook, and in CI on every pull request.
 

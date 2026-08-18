@@ -16,10 +16,11 @@
  *     Reads conventional commits since `context.lastRelease.gitTag`, builds
  *     a list of human-readable change items, and inserts a new `<change
  *     version="X.Y.Z">` element with those items at the top of `<changelog>`.
- *     Writes the descriptor back to disk. The mutation is in-memory on the
- *     CI runner — pair with @semantic-release/github (REST-based release
- *     creation) and DO NOT use @semantic-release/git, so the on-disk file
- *     in master stays at its dev-placeholder state. See README for details.
+ *     Writes the descriptor back to disk. Whether that mutation stays
+ *     in-memory on the CI runner or is committed back to the default branch
+ *     (so the changelog accumulates across releases) depends on whether
+ *     @semantic-release/git is in the plugin chain — both workflows are
+ *     supported. See README for the trade-offs.
  *
  * Config options (all optional):
  *
