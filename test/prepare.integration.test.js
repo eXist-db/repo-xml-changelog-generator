@@ -187,6 +187,21 @@ test('prepare renders issue references as XHTML links', async () => {
   )
 })
 
+test('prepare does not link XQuery function arities as issue references', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 'o.txt', 'fix: semver:sort#3 returns all results (#12)')
+  const ctx = await mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(
+    result,
+    /<li>Fix: semver:sort#3 returns all results \(<a href="https:\/\/github\.com\/eXist-db\/fixture\/issues\/12">#12<\/a>\)<\/li>/,
+    'arity kept as text, real reference still linked'
+  )
+})
+
 test('prepare falls back to plain-text references without a GitHub repositoryUrl', async () => {
   const cwd = setupFixtureRepo()
   addCommit(cwd, 'g.txt', 'fix(ui): address PR #398 review comments')
