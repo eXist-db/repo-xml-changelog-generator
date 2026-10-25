@@ -62,9 +62,6 @@ jobs:
       - run: npm ci
       - run: npm audit signatures
       # npm publishes via OIDC trusted publishing (id-token: write above).
-      # NPM_TOKEN only bootstraps the first release, before the package exists
-      # on npm and a trusted publisher can be configured; remove it after.
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
