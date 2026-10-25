@@ -80,7 +80,7 @@ For each commit semantic-release collected for the release (`context.commits`: e
   - `Improvement` (for `perf:`)
   - `Revert` (for `revert:`)
   - or the literal type for other categories.
-- Render breaking changes (`!` after the type, or a `BREAKING CHANGE:` footer) first, as `Breaking change: scope: subject`. Like every item, they use the commit subject only: the footer's text, which can run to several paragraphs, is left to the release notes. Breaking commits are listed whatever their type, so `refactor!:` shows up too.
+- Render breaking changes first, as `Breaking change: scope: subject`. A commit is breaking when the project's configured `@semantic-release/commit-analyzer` rates it a major release, so its `preset`, `parserOpts` and `releaseRules` apply exactly as they do for the version bump. Like every item, breaking changes use the commit subject only: a `BREAKING CHANGE:` footer's text, which can run to several paragraphs, is left to the release notes. Breaking commits are listed whatever their type, so `refactor!:` shows up too.
 - Render issue/PR references (e.g. `#398`) as XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`; on non-GitHub remotes they are kept as plain text.
 - Hard-wrapped commit subjects are folded into a single line. Commit bodies, including trailers such as `Co-Authored-By:`, are never rendered.
 

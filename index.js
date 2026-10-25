@@ -31,7 +31,7 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { buildChangeItems, insertChangeEntry } from './lib/changelog.js'
+import { buildChangeItems, findBreakingCommits, insertChangeEntry } from './lib/changelog.js'
 
 const REPO_NS = 'http://exist-db.org/xquery/repo'
 
@@ -75,6 +75,7 @@ export async function prepare (pluginConfig, context) {
 
   const items = await buildChangeItems({
     commits: context.commits,
+    breaking: await findBreakingCommits(context),
     version: nextRelease.version,
     repositoryUrl: context.options?.repositoryUrl
   })

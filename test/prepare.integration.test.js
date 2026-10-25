@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url'
 import { getCommits } from 'semantic-release/lib/git.js'
 
 import * as plugin from '../index.js'
+import { commitAnalyzerConfig } from '../lib/changelog.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -62,7 +63,12 @@ function addCommit (dir, file, message) {
 
 // Collects `commits` the way semantic-release does: everything since the
 // last release, or all commits of the branch for a first release.
-async function mockContext (cwd, lastTag, repositoryUrl = 'https://github.com/eXist-db/fixture.git') {
+async function mockContext (
+  cwd,
+  lastTag,
+  repositoryUrl = 'https://github.com/eXist-db/fixture.git',
+  analyzerConfig = { preset: 'conventionalcommits' }
+) {
   const logs = []
   const gitHead = lastTag
     ? execSync(`git rev-list -n 1 ${lastTag}`, { cwd, encoding: 'utf8' }).trim()
@@ -73,7 +79,10 @@ async function mockContext (cwd, lastTag, repositoryUrl = 'https://github.com/eX
     lastRelease: lastTag ? { gitTag: lastTag, gitHead } : {},
     commits: await getCommits(gitHead, 'HEAD', { cwd }),
     nextRelease: { version: '1.0.0', gitTag: 'v1.0.0' },
-    options: repositoryUrl ? { repositoryUrl } : {},
+    options: {
+      ...(repositoryUrl ? { repositoryUrl } : {}),
+      plugins: [['@semantic-release/commit-analyzer', analyzerConfig], '@semantic-release/release-notes-generator']
+    },
     _logs: logs
   }
 }
@@ -207,6 +216,43 @@ test('prepare renders breaking changes from the subject, not the footer', async 
   assert.doesNotMatch(result, /old API is gone|Co-Authored-By|Signed-off-by/i, 'neither footer nor trailers rendered')
   const items = result.match(/<li>[^<]*<\/li>/g)
   assert.match(items[0], /^<li>Breaking change:/, 'breaking changes listed first')
+})
+
+test('breaking changes are the ones the configured commit-analyzer rates major', async () => {
+  const cwd = setupFixtureRepo()
+  // Not breaking for an analyzer that only knows the `BREAKING CHANGE` keyword:
+  addCommit(cwd, 'l.txt', 'fix: tidy the parser\n\nBREAKING-CHANGE: nothing really')
+  addCommit(cwd, 'm.txt', 'refactor: shuffle internals\n\nBREAKING-CHANGE: not really either')
+  // Breaking through a custom release rule, though it has no footer:
+  addCommit(cwd, 'n.txt', 'docs(api): drop the v1 reference')
+  const ctx = await mockContext(cwd, 'v0.0.1', undefined, {
+    preset: 'conventionalcommits',
+    parserOpts: { noteKeywords: ['BREAKING CHANGE'] },
+    releaseRules: [{ type: 'docs', scope: 'api', release: 'major' }]
+  })
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>Fix: tidy the parser<\/li>/, 'footer the analyzer ignores is not breaking')
+  assert.doesNotMatch(result, /shuffle internals/, 'hidden type without a breaking verdict skipped')
+  assert.match(result, /<li>Breaking change: api: drop the v1 reference<\/li>/, 'custom major rule rendered as breaking')
+  assert.match(result, /<li>Breaking change: drop legacy API<\/li>/, 'BREAKING CHANGE footer still breaking')
+})
+
+test('commitAnalyzerConfig merges global options with the analyzer entry', () => {
+  assert.deepEqual(
+    commitAnalyzerConfig({
+      preset: 'angular',
+      branches: ['main'],
+      plugins: ['@semantic-release/npm', ['@semantic-release/commit-analyzer', { preset: 'conventionalcommits' }]]
+    }),
+    { preset: 'conventionalcommits', branches: ['main'] }
+  )
+  assert.deepEqual(
+    commitAnalyzerConfig({ preset: 'angular', plugins: ['@semantic-release/commit-analyzer'] }),
+    { preset: 'angular' }
+  )
 })
 
 test('prepare escapes XML special characters in subjects', async () => {

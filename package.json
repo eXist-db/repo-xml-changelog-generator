@@ -42,6 +42,7 @@
     "node": ">=22"
   },
   "peerDependencies": {
+    "@semantic-release/commit-analyzer": ">=11",
     "semantic-release": ">=22"
   },
   "dependencies": {
