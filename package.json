@@ -45,7 +45,7 @@
     "semantic-release": ">=22"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.9.0",
+    "@xmldom/xmldom": "^0.9.12",
     "conventional-changelog-conventionalcommits": "^9.0.0",
     "conventional-changelog-writer": "^8.0.0",
     "conventional-commits-parser": "^6.0.0"
