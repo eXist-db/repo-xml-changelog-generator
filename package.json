@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.9.12",
-    "conventional-changelog-conventionalcommits": "^10.0.0",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "conventional-changelog-writer": "^9.0.0",
     "conventional-commits-parser": "^6.0.0"
   },
