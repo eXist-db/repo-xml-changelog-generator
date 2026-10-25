@@ -70,19 +70,28 @@ If either check fails, semantic-release aborts before doing anything. This is th
 
 ### `prepare` (runs after version is computed)
 
-For each commit semantic-release collected for the release (`context.commits`: everything since the last release, or all commits of the branch on a first release):
+Analysis is left entirely to the project's semantic-release configuration; the plugin only renders the result.
 
-- Skip non-typed commits (those that don't match the Conventional Commits grammar).
-- Group by type using `conventional-changelog-conventionalcommits`.
-- Render each commit as `Prefix: scope: subject` where Prefix is one of:
+**Analysis**: the commits are the ones semantic-release collected for the release (`context.commits`): everything since the last release, or all commits of the branch on a first release. Each one is:
+
+- parsed with the parser options of the configured `@semantic-release/commit-analyzer` (its `preset`, `config` and `parserOpts`; `angular` when none is set), and
+- rated on its own by that analyzer, including its `releaseRules`.
+
+A commit is listed when it triggers a release. It's a breaking change when the analyzer rates it major.
+
+**Rendering**:
+
+- Breaking changes first, as `Breaking change: scope: subject`, then the other commits as `Prefix: scope: subject`, where Prefix is:
   - `New` (for `feat:`)
   - `Fix` (for `fix:`)
   - `Improvement` (for `perf:`)
-  - `Revert` (for `revert:`)
-  - or the literal type for other categories.
-- Render breaking changes first, as `Breaking change: scope: subject`. A commit is breaking when the project's configured `@semantic-release/commit-analyzer` rates it a major release, so its `preset`, `parserOpts` and `releaseRules` apply exactly as they do for the version bump. Like every item, breaking changes use the commit subject only: a `BREAKING CHANGE:` footer's text, which can run to several paragraphs, is left to the release notes. Breaking commits are listed whatever their type, so `refactor!:` shows up too.
-- Render issue/PR references (e.g. `#398`) as XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`; on non-GitHub remotes they are kept as plain text.
-- Hard-wrapped commit subjects are folded into a single line. Commit bodies, including trailers such as `Co-Authored-By:`, are never rendered.
+  - `Revert` (for reverts)
+  - or the literal type for any other type a project's release rules let through.
+- Items are ordered by type in that order, then by scope and subject.
+- Only the commit subject is rendered. A `BREAKING CHANGE:` footer's text, which can run to several paragraphs, is left to the release notes. Commit bodies, including trailers such as `Co-Authored-By:`, never appear.
+- A header the project's parser does not understand is shown as is (e.g. `feat(api)!: …` under `angular`, which has no `!` marker).
+- Issue/PR references the parser found (e.g. `#398`) become XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`. References to other repositories, which include XQuery function arities like `semver:sort#3`, and all references on non-GitHub remotes, stay plain text.
+- Hard-wrapped commit subjects are folded into a single line.
 
 The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://www.w3.org/1999/xhtml">…</ul></change>` and inserted at the **top** of the existing `<changelog>` element (most recent first).
 

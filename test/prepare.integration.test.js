@@ -255,6 +255,36 @@ test('breaking changes are the ones the configured commit-analyzer rates major',
   assert.match(result, /<li>Breaking change: drop legacy API<\/li>/, 'BREAKING CHANGE footer still breaking')
 })
 
+test('commits are parsed with the configured analyzer preset', async () => {
+  const cwd = setupFixtureRepo()
+  // `angular` does not know the `!` marker: the header stays unparsed and is
+  // shown as is, while its BREAKING CHANGE footer still makes it major.
+  addCommit(cwd, 'p.txt', 'feat(api)!: drop v1\n\nBREAKING CHANGE: v1 is gone')
+  const ctx = await mockContext(cwd, 'v0.0.1', undefined, {})
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>Breaking change: feat\(api\)!: drop v1<\/li>/, 'unparsed header shown as is')
+  assert.match(result, /<li>New: add new awesome feature<\/li>/, 'regular commits parsed by angular')
+})
+
+test('types released by custom rules keep their literal type', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 'q.txt', 'docs: explain the router')
+  addCommit(cwd, 'r.txt', 'style: reformat sources')
+  const ctx = await mockContext(cwd, 'v0.0.1', undefined, {
+    preset: 'conventionalcommits',
+    releaseRules: [{ type: 'docs', release: 'patch' }]
+  })
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>docs: explain the router<\/li>/, 'released docs commit listed')
+  assert.doesNotMatch(result, /reformat sources/, 'commit that triggers no release skipped')
+})
+
 test('commitAnalyzerConfig merges global options with the analyzer entry', () => {
   assert.deepEqual(
     commitAnalyzerConfig({

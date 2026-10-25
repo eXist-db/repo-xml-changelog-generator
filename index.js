@@ -31,7 +31,7 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { buildChangeItems, findBreakingCommits, insertChangeEntry } from './lib/changelog.js'
+import { analyzeChanges, buildChangeItems, insertChangeEntry } from './lib/changelog.js'
 
 const REPO_NS = 'http://exist-db.org/xquery/repo'
 
@@ -73,10 +73,8 @@ export async function prepare (pluginConfig, context) {
   const { logger, lastRelease, nextRelease } = context
   const tmplPath = resolveTmplPath(pluginConfig, context)
 
-  const items = await buildChangeItems({
-    commits: context.commits,
-    breaking: await findBreakingCommits(context),
-    version: nextRelease.version,
+  const items = buildChangeItems({
+    changes: await analyzeChanges(context),
     repositoryUrl: context.options?.repositoryUrl
   })
 
