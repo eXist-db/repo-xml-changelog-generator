@@ -184,23 +184,27 @@ test('prepare falls back to plain-text references without a GitHub repositoryUrl
   assert.doesNotMatch(result, /undefined/, 'no broken undefined URLs')
 })
 
-test('prepare drops attribution trailers from breaking-change notes', async () => {
+test('prepare drops git trailers from breaking-change notes', async () => {
   const cwd = setupFixtureRepo()
   addCommit(cwd, 'i.txt',
     'feat!: remove the old API\n\n' +
     'BREAKING CHANGE: The old API is gone.\n\n' +
     'Co-Authored-By: Someone <someone@example.com>\n' +
-    'Signed-off-by: Other <other@example.com>')
+    'Signed-off-by: Other <other@example.com>\n' +
+    'Reviewed-by: Reviewer <reviewer@example.com>\n' +
+    'Claude-Session: https://claude.ai/code/session_123\n' +
+    'Change-Id: I0123456789abcdef')
   addCommit(cwd, 'j.txt',
     'feat!: rename the config file\n\n' +
     'Co-authored-by: Someone <someone@example.com>\n' +
     'BREAKING-CHANGE: config.json is now settings.json.')
-  // A squashed fixup leaves a trailer in the middle of the message.
+  // A squashed fixup repeats a trailer in the middle of the message.
   addCommit(cwd, 'k.txt',
     'feat!: require Node 22\n\n' +
     'BREAKING CHANGE: Node 20 is no longer supported.\n\n' +
     'Co-Authored-By: Someone <someone@example.com>\n\n' +
-    'More details.')
+    'More details.\n\n' +
+    'Co-Authored-By: Someone <someone@example.com>')
   const ctx = mockContext(cwd, 'v0.0.1')
 
   await plugin.prepare({}, ctx)
@@ -209,7 +213,7 @@ test('prepare drops attribution trailers from breaking-change notes', async () =
   assert.match(result, /<li>Breaking change: The old API is gone\.<\/li>/, 'trailers dropped from note')
   assert.match(result, /<li>Breaking change: config\.json is now settings\.json\.<\/li>/, 'BREAKING-CHANGE footer kept')
   assert.match(result, /<li>Breaking change: Node 20 is no longer supported\. More details\.<\/li>/, 'mid-message trailer dropped')
-  assert.doesNotMatch(result, /Co-Authored-By|Signed-off-by/i, 'no trailer leaks into the changelog')
+  assert.doesNotMatch(result, /Co-Authored-By|Signed-off-by|Reviewed-by|Claude-Session|Change-Id/i, 'no trailer leaks into the changelog')
 })
 
 test('prepare escapes XML special characters in subjects', async () => {
