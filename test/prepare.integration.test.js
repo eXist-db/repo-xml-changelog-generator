@@ -52,13 +52,20 @@ function setupFixtureRepo () {
   return dir
 }
 
-function mockContext (cwd, lastTag) {
+function addCommit (dir, file, message) {
+  writeFileSync(join(dir, file), file)
+  execSync('git add ' + file, { cwd: dir, stdio: 'pipe' })
+  execSync(`git commit -q -m "${message}"`, { cwd: dir, stdio: 'pipe' })
+}
+
+function mockContext (cwd, lastTag, repositoryUrl = 'https://github.com/eXist-db/fixture.git') {
   const logs = []
   return {
     cwd,
     logger: { log: (msg) => logs.push(msg) },
     lastRelease: { gitTag: lastTag },
     nextRelease: { version: '1.0.0', gitTag: 'v1.0.0' },
+    options: repositoryUrl ? { repositoryUrl } : {},
     _logs: logs
   }
 }
@@ -131,6 +138,61 @@ test('prepare skips when no lastRelease.gitTag (first release)', async () => {
 
   const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
   assert.doesNotMatch(result, /version="1\.0\.0"/, 'template not mutated')
+})
+
+test('prepare folds hard-wrapped commit subjects into a single item', async () => {
+  const cwd = setupFixtureRepo()
+  // A subject paragraph hard-wrapped by an editor at 72 columns: git treats
+  // both lines as the subject, so no words may be lost.
+  addCommit(cwd, 'e.txt', 'feat: redesign browse indexes with KPI summary and vector\nbadges')
+  const ctx = mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(
+    result,
+    /New: redesign browse indexes with KPI summary and vector badges/,
+    'wrapped subject rendered in full'
+  )
+})
+
+test('prepare renders issue references as XHTML links', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 'f.txt', 'fix(ui): address PR #398 review comments')
+  const ctx = mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(
+    result,
+    /Fix: ui: address PR <a href="https:\/\/github\.com\/eXist-db\/fixture\/issues\/398">#398<\/a> review comments/,
+    'issue reference rendered as anchor with URL derived from repositoryUrl'
+  )
+})
+
+test('prepare falls back to plain-text references without a GitHub repositoryUrl', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 'g.txt', 'fix(ui): address PR #398 review comments')
+  const ctx = mockContext(cwd, 'v0.0.1', null)
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /address PR #398 review comments/, 'reference kept as plain text')
+  assert.doesNotMatch(result, /undefined/, 'no broken undefined URLs')
+})
+
+test('prepare escapes XML special characters in subjects', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 'h.txt', 'feat: support <b> tags & friends')
+  const ctx = mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /support &lt;b&gt; tags &amp; friends/, 'special characters escaped')
 })
 
 test('prepare also accepts numeric tag form (e.g. lastTag without v prefix)', async () => {

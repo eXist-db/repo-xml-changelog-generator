@@ -64,6 +64,24 @@ test('insertChangeEntry preserves the <changelog> root and other meta children',
   assert.match(result, /<\/changelog>/, '<changelog> closing tag still present')
 })
 
+test('insertChangeEntry renders markdown links as XHTML anchors', () => {
+  const tmplPath = inTempDir()
+
+  insertChangeEntry({
+    tmplPath,
+    version: '4.0.0',
+    items: ['Fix: ui: address PR [#398](https://github.com/eXist-db/monex/issues/398) review comments']
+  })
+
+  const result = readFileSync(tmplPath, 'utf8')
+
+  assert.match(
+    result,
+    /Fix: ui: address PR <a href="https:\/\/github\.com\/eXist-db\/monex\/issues\/398">#398<\/a> review comments/,
+    'markdown link converted to anchor'
+  )
+})
+
 test('insertChangeEntry uses correct namespaces (repo for <change>, html for <ul>/<li>)', () => {
   const tmplPath = inTempDir()
 
