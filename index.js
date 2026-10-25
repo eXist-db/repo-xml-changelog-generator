@@ -13,7 +13,8 @@
  *     fast (before the release is computed) with an actionable error if not.
  *
  *   prepare(pluginConfig, context)
- *     Reads conventional commits since `context.lastRelease.gitTag`, builds
+ *     Reads the conventional commits semantic-release collected for this
+ *     release (`context.commits`; all commits for a first release), builds
  *     a list of human-readable change items, and inserts a new `<change
  *     version="X.Y.Z">` element with those items at the top of `<changelog>`.
  *     Writes the descriptor back to disk. Whether that mutation stays
@@ -72,23 +73,15 @@ export async function prepare (pluginConfig, context) {
   const { logger, lastRelease, nextRelease } = context
   const tmplPath = resolveTmplPath(pluginConfig, context)
 
-  if (!lastRelease?.gitTag) {
-    logger.log(
-      '[repo-xml-changelog-generator] No previous release tag — skipping changelog injection. ' +
-      '(First-release entries should be curated manually in repo.xml.tmpl.)'
-    )
-    return
-  }
-
   const items = await buildChangeItems({
-    prevTag: lastRelease.gitTag,
+    commits: context.commits,
     version: nextRelease.version,
-    cwd: context.cwd,
     repositoryUrl: context.options?.repositoryUrl
   })
 
   if (items.length === 0) {
-    logger.log(`[repo-xml-changelog-generator] No notable commits since ${lastRelease.gitTag} — skipping.`)
+    const since = lastRelease?.gitTag ? ` since ${lastRelease.gitTag}` : ''
+    logger.log(`[repo-xml-changelog-generator] No notable commits${since} — skipping.`)
     return
   }
 

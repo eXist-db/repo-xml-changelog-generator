@@ -70,7 +70,7 @@ If either check fails, semantic-release aborts before doing anything. This is th
 
 ### `prepare` (runs after version is computed)
 
-For each conventional commit since `context.lastRelease.gitTag`:
+For each commit semantic-release collected for the release (`context.commits`: everything since the last release, or all commits of the branch on a first release):
 
 - Skip non-typed commits (those that don't match the Conventional Commits grammar).
 - Group by type using `conventional-changelog-conventionalcommits`.
@@ -80,9 +80,9 @@ For each conventional commit since `context.lastRelease.gitTag`:
   - `Improvement` (for `perf:`)
   - `Revert` (for `revert:`)
   - or the literal type for other categories.
-- Render breaking changes as `Breaking change: <text>` from `BREAKING CHANGE:` footers.
+- Render breaking changes (`!` after the type, or a `BREAKING CHANGE:` footer) first, as `Breaking change: scope: subject`. Like every item, they use the commit subject only: the footer's text, which can run to several paragraphs, is left to the release notes. Breaking commits are listed whatever their type, so `refactor!:` shows up too.
 - Render issue/PR references (e.g. `#398`) as XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`; on non-GitHub remotes they are kept as plain text.
-- Hard-wrapped commit subjects are folded into a single line, and hard-wrapped `BREAKING CHANGE:` footers are collapsed to single-line items.
+- Hard-wrapped commit subjects are folded into a single line. Commit bodies, including trailers such as `Co-Authored-By:`, are never rendered.
 
 The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://www.w3.org/1999/xhtml">…</ul></change>` and inserted at the **top** of the existing `<changelog>` element (most recent first).
 
@@ -90,11 +90,10 @@ The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://w
 
 | Situation | Behavior |
 |-----------|----------|
-| No `lastRelease.gitTag` (first release) | Skip injection. Log a note. Curate the initial `<change>` entry manually in the template. |
-| No conventional commits since last tag | Skip injection. Log "no notable commits". |
+| First release (no previous release) | All commits of the branch are rendered into the first `<change>` entry. |
+| No conventional commits since the last release | Skip injection. Log "no notable commits". |
 | Configured `tmplPath` doesn't exist | `verifyConditions` aborts the release with a clear error. |
 | `<changelog>` element missing | `verifyConditions` aborts with instructions to add an empty `<changelog/>`. |
-| `lastRelease.gitTag` is e.g. `1.2.3` but the actual tag is `v1.2.3` | Both forms are tried; the first one that resolves wins. |
 
 ## Design rationale
 
@@ -112,7 +111,7 @@ This plugin supports both workflows; pick per repository.
 
 Because every adopter would still have to copy it into their repo and invoke it via `@semantic-release/exec` prepareCmd. The plugin form:
 
-- Hooks into semantic-release's lifecycle directly (gets `lastRelease`, `nextRelease`, `logger`, `cwd` natively).
+- Hooks into semantic-release's lifecycle directly (gets `lastRelease`, `nextRelease`, `commits`, `logger`, `cwd` natively).
 - Adds proper `verifyConditions` so misconfiguration is caught early.
 - Lets adopters install it as an npm dependency instead of vendoring a 170-line script.
 - Centralizes future improvements (e.g. cross-link PRs/issues, support `expath-pkg.xml.tmpl` version sync, support custom commit-type → prefix mappings).

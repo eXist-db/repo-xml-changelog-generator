@@ -14,6 +14,8 @@ import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { fileURLToPath } from 'url'
 
+import { getCommits } from 'semantic-release/lib/git.js'
+
 import * as plugin from '../index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -58,12 +60,18 @@ function addCommit (dir, file, message) {
   execSync(`git commit -q -m "${message}"`, { cwd: dir, stdio: 'pipe' })
 }
 
-function mockContext (cwd, lastTag, repositoryUrl = 'https://github.com/eXist-db/fixture.git') {
+// Collects `commits` the way semantic-release does: everything since the
+// last release, or all commits of the branch for a first release.
+async function mockContext (cwd, lastTag, repositoryUrl = 'https://github.com/eXist-db/fixture.git') {
   const logs = []
+  const gitHead = lastTag
+    ? execSync(`git rev-list -n 1 ${lastTag}`, { cwd, encoding: 'utf8' }).trim()
+    : undefined
   return {
     cwd,
     logger: { log: (msg) => logs.push(msg) },
-    lastRelease: { gitTag: lastTag },
+    lastRelease: lastTag ? { gitTag: lastTag, gitHead } : {},
+    commits: await getCommits(gitHead, 'HEAD', { cwd }),
     nextRelease: { version: '1.0.0', gitTag: 'v1.0.0' },
     options: repositoryUrl ? { repositoryUrl } : {},
     _logs: logs
@@ -72,20 +80,20 @@ function mockContext (cwd, lastTag, repositoryUrl = 'https://github.com/eXist-db
 
 test('verifyConditions accepts a well-formed fixture', async () => {
   const cwd = setupFixtureRepo()
-  const ctx = mockContext(cwd, 'v0.0.1')
+  const ctx = await mockContext(cwd, 'v0.0.1')
 
   await plugin.verifyConditions({}, ctx)
   assert.ok(ctx._logs.some(m => m.includes('verified')), 'logged verification')
 })
 
 test('verifyConditions rejects when template is missing', async () => {
-  const ctx = mockContext('/nonexistent-12345', 'v0.0.1')
+  const ctx = { cwd: '/nonexistent-12345', logger: { log () {} } }
   await assert.rejects(plugin.verifyConditions({}, ctx), /Template not found/)
 })
 
 test('prepare injects conventional commits as a new <change>', async () => {
   const cwd = setupFixtureRepo()
-  const ctx = mockContext(cwd, 'v0.0.1')
+  const ctx = await mockContext(cwd, 'v0.0.1')
 
   await plugin.prepare({}, ctx)
 
@@ -94,14 +102,15 @@ test('prepare injects conventional commits as a new <change>', async () => {
   assert.match(result, /<change version="1\.0\.0">/, 'new <change> present')
 
   // Each conventional commit should be rendered as a <li>
-  assert.match(result, /Breaking change: removed deprecated do_thing/, 'BREAKING CHANGE rendered')
+  assert.match(result, /<li>Breaking change: drop legacy API<\/li>/, 'breaking change rendered from its subject')
   assert.match(result, /New: add new awesome feature/, 'feat rendered with New prefix')
   assert.match(result, /Fix: parser: handle empty input/, 'fix rendered with Fix prefix and scope')
   assert.match(result, /Improvement: speed up the hot loop/, 'perf rendered with Improvement prefix')
 
-  // The breaking-change feat commit should NOT also appear as a non-breaking item
+  // The breaking-change feat commit appears once, and not as a New: item
   const matches = result.match(/drop legacy API/g) ?? []
-  assert.equal(matches.length, 0, 'breaking commit is not double-rendered')
+  assert.equal(matches.length, 1, 'breaking commit is not double-rendered')
+  assert.doesNotMatch(result, /removed deprecated do_thing/, 'footer text is left to the release notes')
 
   // 0.0.1 entry still present
   assert.match(result, /version="0\.0\.1"/)
@@ -111,7 +120,7 @@ test('prepare logs and exits cleanly when no commits since lastRelease', async (
   const cwd = setupFixtureRepo()
   // Use HEAD as the previous tag, so there are no commits after it
   execSync('git tag v0.9.9', { cwd, stdio: 'pipe' })
-  const ctx = mockContext(cwd, 'v0.9.9')
+  const ctx = await mockContext(cwd, 'v0.9.9')
 
   await plugin.prepare({}, ctx)
 
@@ -125,19 +134,16 @@ test('prepare logs and exits cleanly when no commits since lastRelease', async (
   assert.doesNotMatch(result, /version="1\.0\.0"/, 'template not mutated')
 })
 
-test('prepare skips when no lastRelease.gitTag (first release)', async () => {
+test('prepare renders all commits on a first release', async () => {
   const cwd = setupFixtureRepo()
-  const ctx = mockContext(cwd, '')
+  const ctx = await mockContext(cwd, undefined)
 
   await plugin.prepare({}, ctx)
 
-  assert.ok(
-    ctx._logs.some(m => m.includes('No previous release tag')),
-    'logged first-release skip message'
-  )
-
   const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
-  assert.doesNotMatch(result, /version="1\.0\.0"/, 'template not mutated')
+  assert.match(result, /<change version="1\.0\.0">/, 'new <change> present')
+  assert.match(result, /New: add new awesome feature/, 'commit before the v0.0.1 tag included')
+  assert.doesNotMatch(result, /initial commit/, 'hidden chore commit still skipped')
 })
 
 test('prepare folds hard-wrapped commit subjects into a single item', async () => {
@@ -145,7 +151,7 @@ test('prepare folds hard-wrapped commit subjects into a single item', async () =
   // A subject paragraph hard-wrapped by an editor at 72 columns: git treats
   // both lines as the subject, so no words may be lost.
   addCommit(cwd, 'e.txt', 'feat: redesign browse indexes with KPI summary and vector\nbadges')
-  const ctx = mockContext(cwd, 'v0.0.1')
+  const ctx = await mockContext(cwd, 'v0.0.1')
 
   await plugin.prepare({}, ctx)
 
@@ -160,7 +166,7 @@ test('prepare folds hard-wrapped commit subjects into a single item', async () =
 test('prepare renders issue references as XHTML links', async () => {
   const cwd = setupFixtureRepo()
   addCommit(cwd, 'f.txt', 'fix(ui): address PR #398 review comments')
-  const ctx = mockContext(cwd, 'v0.0.1')
+  const ctx = await mockContext(cwd, 'v0.0.1')
 
   await plugin.prepare({}, ctx)
 
@@ -175,7 +181,7 @@ test('prepare renders issue references as XHTML links', async () => {
 test('prepare falls back to plain-text references without a GitHub repositoryUrl', async () => {
   const cwd = setupFixtureRepo()
   addCommit(cwd, 'g.txt', 'fix(ui): address PR #398 review comments')
-  const ctx = mockContext(cwd, 'v0.0.1', null)
+  const ctx = await mockContext(cwd, 'v0.0.1', null)
 
   await plugin.prepare({}, ctx)
 
@@ -184,52 +190,32 @@ test('prepare falls back to plain-text references without a GitHub repositoryUrl
   assert.doesNotMatch(result, /undefined/, 'no broken undefined URLs')
 })
 
-test('prepare drops attribution trailers from breaking-change notes', async () => {
+test('prepare renders breaking changes from the subject, not the footer', async () => {
   const cwd = setupFixtureRepo()
   addCommit(cwd, 'i.txt',
-    'feat!: remove the old API\n\n' +
-    'BREAKING CHANGE: The old API is gone.\n\n' +
+    'refactor(api)!: remove the old API\n\n' +
+    'BREAKING CHANGE: The old API is gone. Migrating takes a few steps:\n' +
+    'first replace the calls, then update the configuration.\n\n' +
     'Co-Authored-By: Someone <someone@example.com>\n' +
     'Signed-off-by: Other <other@example.com>')
-  addCommit(cwd, 'j.txt',
-    'feat!: rename the config file\n\n' +
-    'Co-authored-by: Someone <someone@example.com>\n' +
-    'BREAKING-CHANGE: config.json is now settings.json.')
-  // A squashed fixup leaves a trailer in the middle of the message.
-  addCommit(cwd, 'k.txt',
-    'feat!: require Node 22\n\n' +
-    'BREAKING CHANGE: Node 20 is no longer supported.\n\n' +
-    'Co-Authored-By: Someone <someone@example.com>\n\n' +
-    'More details.')
-  const ctx = mockContext(cwd, 'v0.0.1')
+  const ctx = await mockContext(cwd, 'v0.0.1')
 
   await plugin.prepare({}, ctx)
 
   const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
-  assert.match(result, /<li>Breaking change: The old API is gone\.<\/li>/, 'trailers dropped from note')
-  assert.match(result, /<li>Breaking change: config\.json is now settings\.json\.<\/li>/, 'BREAKING-CHANGE footer kept')
-  assert.match(result, /<li>Breaking change: Node 20 is no longer supported\. More details\.<\/li>/, 'mid-message trailer dropped')
-  assert.doesNotMatch(result, /Co-Authored-By|Signed-off-by/i, 'no trailer leaks into the changelog')
+  assert.match(result, /<li>Breaking change: api: remove the old API<\/li>/, 'subject of a hidden type rendered as breaking')
+  assert.doesNotMatch(result, /old API is gone|Co-Authored-By|Signed-off-by/i, 'neither footer nor trailers rendered')
+  const items = result.match(/<li>[^<]*<\/li>/g)
+  assert.match(items[0], /^<li>Breaking change:/, 'breaking changes listed first')
 })
 
 test('prepare escapes XML special characters in subjects', async () => {
   const cwd = setupFixtureRepo()
   addCommit(cwd, 'h.txt', 'feat: support <b> tags & friends')
-  const ctx = mockContext(cwd, 'v0.0.1')
+  const ctx = await mockContext(cwd, 'v0.0.1')
 
   await plugin.prepare({}, ctx)
 
   const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
   assert.match(result, /support &lt;b&gt; tags &amp; friends/, 'special characters escaped')
-})
-
-test('prepare also accepts numeric tag form (e.g. lastTag without v prefix)', async () => {
-  const cwd = setupFixtureRepo()
-  // lastRelease.gitTag is "0.0.1" but the actual tag in git is "v0.0.1"
-  const ctx = mockContext(cwd, '0.0.1')
-
-  await plugin.prepare({}, ctx)
-
-  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
-  assert.match(result, /<change version="1\.0\.0">/, 'still found commits via v-prefixed fallback')
 })
