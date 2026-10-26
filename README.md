@@ -12,7 +12,7 @@ eXist-db apps and libraries that already use [semantic-release](https://github.c
 npm install --save-dev @existdb/repo-xml-changelog-generator
 ```
 
-Requires semantic-release 24 or newer (with `@semantic-release/commit-analyzer` 13 or newer, which it ships) and Node.js 22 or newer. The plugin uses the commit-analyzer and commit parser semantic-release runs; `verifyConditions` stops the release early if that analyzer is older.
+Requires semantic-release 24 or newer (with `@semantic-release/commit-analyzer` 13 or newer, which it ships) and Node.js 22 or newer. The plugin parses commits with the commit parser of the commit-analyzer semantic-release ships; `verifyConditions` stops the release early if that analyzer is older or its parser cannot be loaded.
 
 ## Usage
 
@@ -67,19 +67,22 @@ See [Design rationale](#design-rationale) below.
 
 - Confirms `tmplPath` exists.
 - Confirms the descriptor contains a `<changelog xmlns="http://exist-db.org/xquery/repo">` element.
+- Confirms the commit parser and all configured analyzers can be loaded.
 
-If either check fails, semantic-release aborts before doing anything. This is the right place to surface configuration mistakes, not the middle of a release.
+If any check fails, semantic-release aborts before doing anything. This is the right place to surface configuration mistakes, not the middle of a release.
 
 ### `prepare` (runs after version is computed)
 
 Analysis is left entirely to the project's semantic-release configuration; the plugin only renders the result.
 
-**Analysis**: the commits are the ones semantic-release collected for the release (`context.commits`): everything since the last release, or all commits of the branch on a first release. Each one is:
+**Analysis**: the commits are the ones semantic-release collected for the release (`context.commits`): everything since the last release, or all commits of the branch on a first release. As semantic-release does, commits marked `[skip release]` are left out, and so is a commit reverted within the same release, together with its revert. Each remaining commit is:
 
 - parsed with the parser options of the configured `@semantic-release/commit-analyzer` (its `preset`, `config` and `parserOpts`; `angular` when none is set), and
-- rated on its own by that analyzer, including its `releaseRules`.
+- rated on its own by every configured analyzer, that is, every plugin with an `analyzeCommits` step: `@semantic-release/commit-analyzer` with its `releaseRules`, and any custom analyzer. As in semantic-release, the highest rating wins.
 
-A commit is listed when it triggers a release. It's a breaking change when the analyzer rates it major.
+A commit is listed when it triggers a release. It's a breaking change when an analyzer rates it major.
+
+Without a `@semantic-release/commit-analyzer` entry, commits are parsed with the options of the first other analyzer, so a custom analyzer that takes `preset` or `parserOpts` keeps working. Otherwise the `angular` defaults apply, and headers they can't parse are shown as is.
 
 **Rendering**:
 
@@ -91,6 +94,7 @@ A commit is listed when it triggers a release. It's a breaking change when the a
   - or the literal type for any other type a project's release rules let through.
 - Items are ordered by type in that order, then by scope and subject.
 - Only the commit subject is rendered. A `BREAKING CHANGE:` footer's text, which can run to several paragraphs, is left to the release notes. Commit bodies, including trailers such as `Co-Authored-By:`, never appear.
+- A revert of a commit from an earlier release is listed as `Revert: <reverted header>`.
 - A header the project's parser does not understand is shown as is (e.g. `feat(api)!: …` under `angular`, which has no `!` marker).
 - Issue/PR references the parser found (e.g. `#398`) become XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`. References to other repositories, which include XQuery function arities like `semver:sort#3`, and all references on non-GitHub remotes, stay plain text.
 - Hard-wrapped commit subjects are folded into a single line.

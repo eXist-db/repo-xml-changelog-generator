@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url'
 import { getCommits } from 'semantic-release/lib/git.js'
 
 import * as plugin from '../index.js'
-import { commitAnalyzerConfig } from '../lib/changelog.js'
+import { pluginEntries } from '../lib/changelog.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -285,19 +285,109 @@ test('types released by custom rules keep their literal type', async () => {
   assert.doesNotMatch(result, /reformat sources/, 'commit that triggers no release skipped')
 })
 
-test('commitAnalyzerConfig merges global options with the analyzer entry', () => {
+test('pluginEntries merges global options with each entry', () => {
+  const inline = { analyzeCommits () {} }
   assert.deepEqual(
-    commitAnalyzerConfig({
+    pluginEntries({
       preset: 'angular',
       branches: ['main'],
-      plugins: ['@semantic-release/npm', ['@semantic-release/commit-analyzer', { preset: 'conventionalcommits' }]]
+      plugins: [
+        '@semantic-release/npm',
+        ['@semantic-release/commit-analyzer', { preset: 'conventionalcommits' }],
+        { path: './analyzer.js', label: 'x' },
+        inline
+      ]
     }),
-    { preset: 'conventionalcommits', branches: ['main'] }
+    [
+      ['@semantic-release/npm', { preset: 'angular', branches: ['main'] }],
+      ['@semantic-release/commit-analyzer', { preset: 'conventionalcommits', branches: ['main'] }],
+      ['./analyzer.js', { preset: 'angular', branches: ['main'], label: 'x' }],
+      [inline, { preset: 'angular', branches: ['main'] }]
+    ]
   )
-  assert.deepEqual(
-    commitAnalyzerConfig({ preset: 'angular', plugins: ['@semantic-release/commit-analyzer'] }),
-    { preset: 'angular' }
-  )
+  assert.deepEqual(pluginEntries({}), [['@semantic-release/commit-analyzer', {}]])
+})
+
+test('commits reverted within the release are left out with their reverts', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 's.txt', 'feat: add x')
+  addCommit(cwd, 't.txt', 'fix: keep y')
+  execSync('git revert --no-edit HEAD~1', { cwd, stdio: 'pipe' })
+  const ctx = await mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>Fix: keep y<\/li>/, 'other commits still listed')
+  assert.doesNotMatch(result, /add x/, 'reverted commit and its revert both left out')
+})
+
+test('reverts of earlier releases show the reverted header', async () => {
+  const cwd = setupFixtureRepo()
+  execSync('git tag v0.1.0', { cwd, stdio: 'pipe' })
+  execSync('git revert --no-edit HEAD', { cwd, stdio: 'pipe' })
+  const ctx = await mockContext(cwd, 'v0.1.0')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>Revert: feat!: drop legacy API<\/li>/, 'revert rendered once, with the reverted header')
+})
+
+test('commits marked [skip release] are left out', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 'u.txt', 'fix: quiet fix [skip release]')
+  const ctx = await mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.doesNotMatch(result, /quiet fix/)
+})
+
+test('every configured analyzer rates the commits, the highest rating wins', async () => {
+  const cwd = setupFixtureRepo()
+  writeFileSync(join(cwd, 'analyzer.mjs'), `export function analyzeCommits ({ word, release }, { commits }) {
+    return commits.some(({ message }) => message.includes(word)) ? release : null
+  }`)
+  addCommit(cwd, 'v.txt', 'docs: mention the [api] change')
+  addCommit(cwd, 'w.txt', 'feat: add [big] thing')
+  const ctx = await mockContext(cwd, 'v0.0.1')
+  ctx.options.plugins.push(['./analyzer.mjs', { word: '[api]', release: 'minor' }])
+  ctx.options.plugins.push(['./analyzer.mjs', { word: '[big]', release: 'major' }])
+
+  await plugin.verifyConditions({}, ctx)
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>docs: mention the \[api\] change<\/li>/, 'released by the custom analyzer only')
+  assert.match(result, /<li>Breaking change: add \[big\] thing<\/li>/, 'major from the custom analyzer wins')
+  assert.match(result, /<li>Fix: parser: handle empty input<\/li>/, 'commit-analyzer ratings kept')
+})
+
+test('custom analyzers work without @semantic-release/commit-analyzer', async () => {
+  const cwd = setupFixtureRepo()
+  const ctx = await mockContext(cwd, 'v0.0.1')
+  ctx.options.preset = 'conventionalcommits'
+  ctx.options.plugins = [{
+    analyzeCommits: (config, { commits }) => commits[0].message.startsWith('perf') ? 'patch' : null
+  }]
+
+  await plugin.verifyConditions({}, ctx)
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  const change = result.match(/<change version="1\.0\.0">[\s\S]*?<\/change>/)[0]
+  const items = change.match(/<li>[^<]*<\/li>/g)
+  assert.deepEqual(items, ['<li>Improvement: speed up the hot loop</li>'], 'parsed with the analyzer options')
+})
+
+test('verifyConditions rejects an analyzer that cannot be loaded', async () => {
+  const cwd = setupFixtureRepo()
+  const ctx = await mockContext(cwd, 'v0.0.1')
+  ctx.options.plugins.push('./missing-analyzer.mjs')
+
+  await assert.rejects(plugin.verifyConditions({}, ctx), /Cannot find module '\.\/missing-analyzer\.mjs'/)
 })
 
 test('prepare escapes XML special characters in subjects', async () => {

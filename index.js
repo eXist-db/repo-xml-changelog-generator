@@ -9,14 +9,16 @@
  *
  *   verifyConditions(pluginConfig, context)
  *     Confirms the configured descriptor file exists and contains a
- *     `<changelog xmlns="http://exist-db.org/xquery/repo">` element, and that
- *     the @semantic-release/commit-analyzer semantic-release runs is version
- *     13 or newer (semantic-release >= 24). Fails fast (before the release
- *     is computed) with an actionable error if not.
+ *     `<changelog xmlns="http://exist-db.org/xquery/repo">` element, that
+ *     the @semantic-release/commit-analyzer semantic-release ships is version
+ *     13 or newer (semantic-release >= 24), and that its commit parser and
+ *     all configured analyzers load. Fails fast (before the release is
+ *     computed) with an actionable error if not.
  *
  *   prepare(pluginConfig, context)
  *     Reads the conventional commits semantic-release collected for this
- *     release (`context.commits`; all commits for a first release), builds
+ *     release (`context.commits`; all commits for a first release), keeps
+ *     those the configured analyzers rate as release-worthy, builds
  *     a list of human-readable change items, and inserts a new `<change
  *     version="X.Y.Z">` element with those items at the top of `<changelog>`.
  *     Writes the descriptor back to disk. Whether that mutation stays
@@ -33,7 +35,7 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { analyzeChanges, buildChangeItems, insertChangeEntry, verifyCommitAnalyzer } from './lib/changelog.js'
+import { analyzeChanges, buildChangeItems, insertChangeEntry, verifyAnalysis } from './lib/changelog.js'
 
 const REPO_NS = 'http://exist-db.org/xquery/repo'
 
@@ -68,7 +70,7 @@ export async function verifyConditions (pluginConfig, context) {
     )
   }
 
-  await verifyCommitAnalyzer(context.cwd ?? process.cwd())
+  await verifyAnalysis(context)
 
   logger.log(`[repo-xml-changelog-generator] verified ${tmplPath}`)
 }
