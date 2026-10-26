@@ -9,8 +9,10 @@
  *
  *   verifyConditions(pluginConfig, context)
  *     Confirms the configured descriptor file exists and contains a
- *     `<changelog xmlns="http://exist-db.org/xquery/repo">` element. Fails
- *     fast (before the release is computed) with an actionable error if not.
+ *     `<changelog xmlns="http://exist-db.org/xquery/repo">` element, and that
+ *     the @semantic-release/commit-analyzer semantic-release runs is version
+ *     13 or newer (semantic-release >= 24). Fails fast (before the release
+ *     is computed) with an actionable error if not.
  *
  *   prepare(pluginConfig, context)
  *     Reads the conventional commits semantic-release collected for this
@@ -31,7 +33,7 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { analyzeChanges, buildChangeItems, insertChangeEntry } from './lib/changelog.js'
+import { analyzeChanges, buildChangeItems, insertChangeEntry, verifyCommitAnalyzer } from './lib/changelog.js'
 
 const REPO_NS = 'http://exist-db.org/xquery/repo'
 
@@ -65,6 +67,8 @@ export async function verifyConditions (pluginConfig, context) {
       `Add an empty <changelog/> child inside <meta> to enable change-entry injection.`
     )
   }
+
+  await verifyCommitAnalyzer(context.cwd ?? process.cwd())
 
   logger.log(`[repo-xml-changelog-generator] verified ${tmplPath}`)
 }

@@ -12,6 +12,8 @@ eXist-db apps and libraries that already use [semantic-release](https://github.c
 npm install --save-dev @existdb/repo-xml-changelog-generator
 ```
 
+Requires semantic-release 24 or newer (with `@semantic-release/commit-analyzer` 13 or newer, which it ships) and Node.js 22 or newer. The plugin uses the commit-analyzer and commit parser semantic-release runs; `verifyConditions` stops the release early if that analyzer is older.
+
 ## Usage
 
 Add to your `.releaserc` plugin chain. Place it after the commit-analyzer / release-notes-generator (so `lastRelease` and `nextRelease` are populated) and before any plugin that builds the XAR (so the injected change is included in the built artifact):

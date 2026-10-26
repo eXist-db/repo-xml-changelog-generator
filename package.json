@@ -42,7 +42,7 @@
     "node": ">=22"
   },
   "peerDependencies": {
-    "semantic-release": ">=22"
+    "semantic-release": ">=24"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.9.12"
