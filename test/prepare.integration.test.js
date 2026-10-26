@@ -322,6 +322,39 @@ test('commits reverted within the release are left out with their reverts', asyn
   assert.doesNotMatch(result, /add x/, 'reverted commit and its revert both left out')
 })
 
+test('reverted pairs stay when the analyzers do not cancel them out', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 's.txt', 'feat: add x')
+  execSync('git revert --no-edit HEAD', { cwd, stdio: 'pipe' })
+  const ctx = await mockContext(cwd, 'v0.0.1')
+  ctx.options.preset = 'conventionalcommits'
+  // rates every commit, without filtering reverts
+  ctx.options.plugins = [{ analyzeCommits: (config, { commits }) => commits.length ? 'patch' : null }]
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.match(result, /<li>New: add x<\/li>/, 'reverted commit kept')
+  assert.match(result, /<li>Revert: feat: add x<\/li>/, 'revert kept')
+})
+
+test('a reapplied commit is rated as commit-analyzer rates it', async () => {
+  const cwd = setupFixtureRepo()
+  addCommit(cwd, 's.txt', 'feat: add x')
+  execSync('git revert --no-edit HEAD', { cwd, stdio: 'pipe' })
+  // git titles a revert of a revert `Reapply "feat: add x"`, which the
+  // presets do not parse as a revert: commit-analyzer cancels the feat with
+  // the first revert and releases nothing for the reapply.
+  execSync('git revert --no-edit HEAD', { cwd, stdio: 'pipe' })
+  const ctx = await mockContext(cwd, 'v0.0.1')
+
+  await plugin.prepare({}, ctx)
+
+  const result = readFileSync(join(cwd, 'repo.xml.tmpl'), 'utf8')
+  assert.doesNotMatch(result, /add x/)
+  assert.match(result, /<li>New: add new awesome feature<\/li>/, 'other commits still listed')
+})
+
 test('reverts of earlier releases show the reverted header', async () => {
   const cwd = setupFixtureRepo()
   execSync('git tag v0.1.0', { cwd, stdio: 'pipe' })

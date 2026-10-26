@@ -75,12 +75,14 @@ If any check fails, semantic-release aborts before doing anything. This is the r
 
 Analysis is left entirely to the project's semantic-release configuration; the plugin only renders the result.
 
-**Analysis**: the commits are the ones semantic-release collected for the release (`context.commits`): everything since the last release, or all commits of the branch on a first release. As semantic-release does, commits marked `[skip release]` are left out, and so is a commit reverted within the same release, together with its revert. Each remaining commit is:
+**Analysis**: the commits are the ones semantic-release collected for the release (`context.commits`): everything since the last release, or all commits of the branch on a first release. As semantic-release does, commits marked `[skip release]` are left out. Each remaining commit is:
 
 - parsed with the parser options of the configured `@semantic-release/commit-analyzer` (its `preset`, `config` and `parserOpts`; `angular` when none is set), and
 - rated on its own by every configured analyzer, that is, every plugin with an `analyzeCommits` step: `@semantic-release/commit-analyzer` with its `releaseRules`, and any custom analyzer. As in semantic-release, the highest rating wins.
 
 A commit is listed when it triggers a release. It's a breaking change when an analyzer rates it major.
+
+A commit reverted within the same release is left out together with its revert when the analyzers cancel such a pair out. Rated together, the pair then triggers no release; `@semantic-release/commit-analyzer` behaves that way. An analyzer that keeps reverted commits keeps both in the changelog too.
 
 Without a `@semantic-release/commit-analyzer` entry, commits are parsed with the options of the first other analyzer, so a custom analyzer that takes `preset` or `parserOpts` keeps working. Otherwise the `angular` defaults apply, and headers they can't parse are shown as is.
 
