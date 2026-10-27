@@ -12,6 +12,8 @@ eXist-db apps and libraries that already use [semantic-release](https://github.c
 npm install --save-dev @existdb/repo-xml-changelog-generator
 ```
 
+Requires semantic-release 24 or newer (with `@semantic-release/commit-analyzer` 13 or newer, which it ships) and Node.js 22 or newer. The plugin parses commits with the commit parser of the commit-analyzer semantic-release ships; `verifyConditions` stops the release early if that analyzer is older or its parser cannot be loaded.
+
 ## Usage
 
 Add to your `.releaserc` plugin chain. Place it after the commit-analyzer / release-notes-generator (so `lastRelease` and `nextRelease` are populated) and before any plugin that builds the XAR (so the injected change is included in the built artifact):
@@ -65,24 +67,39 @@ See [Design rationale](#design-rationale) below.
 
 - Confirms `tmplPath` exists.
 - Confirms the descriptor contains a `<changelog xmlns="http://exist-db.org/xquery/repo">` element.
+- Confirms the commit parser and all configured analyzers can be loaded.
 
-If either check fails, semantic-release aborts before doing anything. This is the right place to surface configuration mistakes, not the middle of a release.
+If any check fails, semantic-release aborts before doing anything. This is the right place to surface configuration mistakes, not the middle of a release.
 
 ### `prepare` (runs after version is computed)
 
-For each conventional commit since `context.lastRelease.gitTag`:
+Analysis is left entirely to the project's semantic-release configuration; the plugin only renders the result.
 
-- Skip non-typed commits (those that don't match the Conventional Commits grammar).
-- Group by type using `conventional-changelog-conventionalcommits`.
-- Render each commit as `Prefix: scope: subject` where Prefix is one of:
+**Analysis**: the commits are the ones semantic-release collected for the release (`context.commits`): everything since the last release, or all commits of the branch on a first release. As semantic-release does, commits marked `[skip release]` are left out. Each remaining commit is:
+
+- parsed with the parser options of the configured `@semantic-release/commit-analyzer` (its `preset`, `config` and `parserOpts`; `angular` when none is set), and
+- rated on its own by every configured analyzer, that is, every plugin with an `analyzeCommits` step: `@semantic-release/commit-analyzer` with its `releaseRules`, and any custom analyzer. As in semantic-release, the highest rating wins.
+
+A commit is listed when it triggers a release. It's a breaking change when an analyzer rates it major.
+
+A commit reverted within the same release is left out together with its revert when the analyzers cancel such a pair out. Rated together, the pair then triggers no release; `@semantic-release/commit-analyzer` behaves that way. An analyzer that keeps reverted commits keeps both in the changelog too.
+
+Without a `@semantic-release/commit-analyzer` entry, commits are parsed with the options of the first other analyzer, so a custom analyzer that takes `preset` or `parserOpts` keeps working. Otherwise the `angular` defaults apply, and headers they can't parse are shown as is.
+
+**Rendering**:
+
+- Breaking changes first, as `Breaking change: scope: subject`, then the other commits as `Prefix: scope: subject`, where Prefix is:
   - `New` (for `feat:`)
   - `Fix` (for `fix:`)
   - `Improvement` (for `perf:`)
-  - `Revert` (for `revert:`)
-  - or the literal type for other categories.
-- Render breaking changes as `Breaking change: <text>` from `BREAKING CHANGE:` footers.
-- Render issue/PR references (e.g. `#398`) as XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`; on non-GitHub remotes they are kept as plain text.
-- Hard-wrapped commit subjects are folded into a single line, and hard-wrapped `BREAKING CHANGE:` footers are collapsed to single-line items.
+  - `Revert` (for reverts)
+  - or the literal type for any other type a project's release rules let through.
+- Items are ordered by type in that order, then by scope and subject.
+- Only the commit subject is rendered. A `BREAKING CHANGE:` footer's text, which can run to several paragraphs, is left to the release notes. Commit bodies, including trailers such as `Co-Authored-By:`, never appear.
+- A revert of a commit from an earlier release is listed as `Revert: <reverted header>`.
+- A header the project's parser does not understand is shown as is (e.g. `feat(api)!: …` under `angular`, which has no `!` marker).
+- Issue/PR references the parser found (e.g. `#398`) become XHTML `<a>` links, with URLs derived from semantic-release's `repositoryUrl`. References to other repositories, which include XQuery function arities like `semver:sort#3`, and all references on non-GitHub remotes, stay plain text.
+- Hard-wrapped commit subjects are folded into a single line.
 
 The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://www.w3.org/1999/xhtml">…</ul></change>` and inserted at the **top** of the existing `<changelog>` element (most recent first).
 
@@ -90,11 +107,10 @@ The rendered items are wrapped in a `<change version="X.Y.Z"><ul xmlns="http://w
 
 | Situation | Behavior |
 |-----------|----------|
-| No `lastRelease.gitTag` (first release) | Skip injection. Log a note. Curate the initial `<change>` entry manually in the template. |
-| No conventional commits since last tag | Skip injection. Log "no notable commits". |
+| First release (no previous release) | All commits of the branch are rendered into the first `<change>` entry. |
+| No conventional commits since the last release | Skip injection. Log "no notable commits". |
 | Configured `tmplPath` doesn't exist | `verifyConditions` aborts the release with a clear error. |
 | `<changelog>` element missing | `verifyConditions` aborts with instructions to add an empty `<changelog/>`. |
-| `lastRelease.gitTag` is e.g. `1.2.3` but the actual tag is `v1.2.3` | Both forms are tried; the first one that resolves wins. |
 
 ## Design rationale
 
@@ -112,7 +128,7 @@ This plugin supports both workflows; pick per repository.
 
 Because every adopter would still have to copy it into their repo and invoke it via `@semantic-release/exec` prepareCmd. The plugin form:
 
-- Hooks into semantic-release's lifecycle directly (gets `lastRelease`, `nextRelease`, `logger`, `cwd` natively).
+- Hooks into semantic-release's lifecycle directly (gets `lastRelease`, `nextRelease`, `commits`, `logger`, `cwd` natively).
 - Adds proper `verifyConditions` so misconfiguration is caught early.
 - Lets adopters install it as an npm dependency instead of vendoring a 170-line script.
 - Centralizes future improvements (e.g. cross-link PRs/issues, support `expath-pkg.xml.tmpl` version sync, support custom commit-type → prefix mappings).

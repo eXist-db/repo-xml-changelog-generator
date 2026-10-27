@@ -9,11 +9,16 @@
  *
  *   verifyConditions(pluginConfig, context)
  *     Confirms the configured descriptor file exists and contains a
- *     `<changelog xmlns="http://exist-db.org/xquery/repo">` element. Fails
- *     fast (before the release is computed) with an actionable error if not.
+ *     `<changelog xmlns="http://exist-db.org/xquery/repo">` element, that
+ *     the @semantic-release/commit-analyzer semantic-release ships is version
+ *     13 or newer (semantic-release >= 24), and that its commit parser and
+ *     all configured analyzers load. Fails fast (before the release is
+ *     computed) with an actionable error if not.
  *
  *   prepare(pluginConfig, context)
- *     Reads conventional commits since `context.lastRelease.gitTag`, builds
+ *     Reads the conventional commits semantic-release collected for this
+ *     release (`context.commits`; all commits for a first release), keeps
+ *     those the configured analyzers rate as release-worthy, builds
  *     a list of human-readable change items, and inserts a new `<change
  *     version="X.Y.Z">` element with those items at the top of `<changelog>`.
  *     Writes the descriptor back to disk. Whether that mutation stays
@@ -30,7 +35,7 @@
 
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { buildChangeItems, insertChangeEntry } from './lib/changelog.js'
+import { analyzeChanges, buildChangeItems, insertChangeEntry, verifyAnalysis } from './lib/changelog.js'
 
 const REPO_NS = 'http://exist-db.org/xquery/repo'
 
@@ -65,6 +70,8 @@ export async function verifyConditions (pluginConfig, context) {
     )
   }
 
+  await verifyAnalysis(context)
+
   logger.log(`[repo-xml-changelog-generator] verified ${tmplPath}`)
 }
 
@@ -72,23 +79,14 @@ export async function prepare (pluginConfig, context) {
   const { logger, lastRelease, nextRelease } = context
   const tmplPath = resolveTmplPath(pluginConfig, context)
 
-  if (!lastRelease?.gitTag) {
-    logger.log(
-      '[repo-xml-changelog-generator] No previous release tag — skipping changelog injection. ' +
-      '(First-release entries should be curated manually in repo.xml.tmpl.)'
-    )
-    return
-  }
-
-  const items = await buildChangeItems({
-    prevTag: lastRelease.gitTag,
-    version: nextRelease.version,
-    cwd: context.cwd,
+  const items = buildChangeItems({
+    changes: await analyzeChanges(context),
     repositoryUrl: context.options?.repositoryUrl
   })
 
   if (items.length === 0) {
-    logger.log(`[repo-xml-changelog-generator] No notable commits since ${lastRelease.gitTag} — skipping.`)
+    const since = lastRelease?.gitTag ? ` since ${lastRelease.gitTag}` : ''
+    logger.log(`[repo-xml-changelog-generator] No notable commits${since} — skipping.`)
     return
   }
 
