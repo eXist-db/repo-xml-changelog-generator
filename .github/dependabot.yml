@@ -17,7 +17,6 @@ updates:
       patterns:
         - "semantic-release"
         - "@semantic-release/*"
-        - "conventional-changelog-*"
 
 - package-ecosystem: "github-actions"
   directory: "/"
