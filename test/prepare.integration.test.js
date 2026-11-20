@@ -8,18 +8,40 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import { execSync } from 'child_process'
 import { mkdtempSync, copyFileSync, writeFileSync, readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
-import { fileURLToPath } from 'url'
-
-import { getCommits } from 'semantic-release/lib/git.js'
+import { fileURLToPath, pathToFileURL } from 'url'
 
 import * as plugin from '../index.js'
 import { pluginEntries } from '../lib/changelog.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// semantic-release 26 moved git helpers into @semantic-release/core and sealed
+// that package's exports. Resolve the package entry, then load lib/git.js by
+// file URL. Fall back to semantic-release 24/25's lib/git.js when core is absent.
+async function loadGetCommits () {
+  const require = createRequire(import.meta.url)
+  const candidates = []
+  try {
+    candidates.push(join(dirname(require.resolve('@semantic-release/core')), 'lib/git.js'))
+  } catch {}
+  try {
+    candidates.push(join(dirname(require.resolve('semantic-release')), 'lib/git.js'))
+  } catch {}
+  for (const path of candidates) {
+    try {
+      const { getCommits } = await import(pathToFileURL(path).href)
+      if (typeof getCommits === 'function') return getCommits
+    } catch {}
+  }
+  throw new Error('Cannot load getCommits from semantic-release or @semantic-release/core')
+}
+
+const getCommits = await loadGetCommits()
 
 function setupFixtureRepo () {
   const dir = mkdtempSync(join(tmpdir(), 'sre-integ-'))
