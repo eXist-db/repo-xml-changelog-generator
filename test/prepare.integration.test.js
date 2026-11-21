@@ -12,14 +12,36 @@ import { execSync } from 'child_process'
 import { mkdtempSync, copyFileSync, writeFileSync, readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
-import { fileURLToPath } from 'url'
-
-import { getCommits } from 'semantic-release/lib/git.js'
+import { createRequire } from 'module'
+import { fileURLToPath, pathToFileURL } from 'url'
 
 import * as plugin from '../index.js'
 import { pluginEntries } from '../lib/changelog.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// semantic-release 24/25 ship getCommits in lib/git.js; 26 moved it to
+// @semantic-release/core, whose exports do not expose lib/git.js. Load the
+// file by URL from either, resolving core from semantic-release's own
+// installation (it is a dependency of semantic-release, not of this repo).
+async function loadGetCommits () {
+  const srPath = fileURLToPath(import.meta.resolve('semantic-release'))
+  const candidates = [() => join(dirname(srPath), 'lib', 'git.js')]
+  candidates.unshift(() => join(dirname(createRequire(srPath).resolve('@semantic-release/core')), 'lib', 'git.js'))
+  const errors = []
+  for (const candidate of candidates) {
+    try {
+      const { getCommits } = await import(pathToFileURL(candidate()).href)
+      if (typeof getCommits === 'function') return getCommits
+      errors.push(new Error('no getCommits export'))
+    } catch (err) {
+      errors.push(err)
+    }
+  }
+  throw new AggregateError(errors, 'Cannot load getCommits from semantic-release or @semantic-release/core')
+}
+
+const getCommits = await loadGetCommits()
 
 function setupFixtureRepo () {
   const dir = mkdtempSync(join(tmpdir(), 'sre-integ-'))
